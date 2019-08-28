@@ -1,6 +1,6 @@
 var h54sError = require('../error.js');
 var logs = require('../logs.js');
-
+var h54s = require('../h54s.js');
 /*
 * Call Sas program
 *
@@ -133,8 +133,23 @@ module.exports.call = function(sasProgram, tablesObj, callback, params) {
       }
     }
   }).error(function(res) {
-    logs.addApplicationLog('Request failed with status: ' + res.status, sasProgram);
-    callback(new h54sError('httpError', res.statusText));
+    if (res.status == 403 && res.responseText.includes('_csrf') && (_csrf = res.getResponseHeader(res.getResponseHeader('X-CSRF-HEADER')))) {
+      params['_csrf'] = _csrf;
+      console.log(_csrf);
+      if (retryCount < self.maxXhrRetries) {
+          self._ajax.post(self.url, params, true).success(this.success).error(this.error);
+          retryCount++;
+          logs.addApplicationLog("Retrying #" + retryCount, sasProgram);
+      } else {
+          self._utils.parseErrorResponse(res.responseText, sasProgram);
+          self._utils.addFailedResponse(res.responseText, sasProgram);
+          callback(new h54sError('parseError','Unable to parse response json'));
+      }
+    } else {
+        logs.addApplicationLog('Request failed with status: ' + res.status, sasProgram);
+        // if request has error text else callback
+        callback(new h54sError('httpError',res.statusText));
+    }
   });
 };
 
